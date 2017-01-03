@@ -1,27 +1,28 @@
 "use strict";
-var isWindows = /^win/.test(process.platform);
 function createQueuedSender(childProcess) {
     var msgQueue = [];
-    var useQueue = false;
-    var send = function (msg) {
-        if (useQueue) {
-            msgQueue.push(msg);
-            return;
-        }
-        var result = childProcess.send(msg, function (error) {
+    var isSending = false;
+    var doSendLoop = function () {
+        var msg = msgQueue.shift();
+        childProcess.send(msg, function (error) {
             if (error) {
                 console.error(error);
             }
-            useQueue = false;
             if (msgQueue.length > 0) {
-                var msgQueueCopy = msgQueue.slice(0);
-                msgQueue = [];
-                msgQueueCopy.forEach(function (entry) { return send(entry); });
+                setImmediate(doSendLoop);
+            }
+            else {
+                isSending = false;
             }
         });
-        if (!result || isWindows) {
-            useQueue = true;
+    };
+    var send = function (msg) {
+        msgQueue.push(msg);
+        if (isSending) {
+            return;
         }
+        isSending = true;
+        doSendLoop();
     };
     return { send: send };
 }
